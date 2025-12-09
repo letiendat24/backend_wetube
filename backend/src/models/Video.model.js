@@ -16,6 +16,7 @@ const videoSchema = new mongoose.Schema({
         views: { type: Number, default: 0 },
         likes: { type: Number, default: 0 },
         dislikes: { type: Number, default: 0 },
+        comments: { type: Number, default: 0 }
     },
 }, { timestamps: true });
 

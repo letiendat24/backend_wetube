@@ -24,7 +24,7 @@ const updateLikeDislike = async (videoId, userId, newStatus) => {
 
     if (existingLike) {
       const oldStatus = existingLike.status;
-Ư
+
       if (oldStatus === newStatus) {
         await session.abortTransaction();
         return { success: true, message: `Video đã được ${newStatus}` };
@@ -280,7 +280,46 @@ router.get("/:videoId", async (req, res) => {
     res.status(500).json({ message: "Lỗi khi lấy thông tin video." });
   }
 });
+// stats 
+router.post('/:videoId/stats/comments', async (req, res) => {
+    try {
+        const { action } = req.body; // 'increment' hoặc 'decrement'
+        const val = action === 'decrement' ? -1 : 1;
 
+        await Video.findByIdAndUpdate(req.params.videoId, { 
+            $inc: { 'stats.comments': val } 
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Lỗi update video stats:", error);
+        res.status(500).json({ message: "Lỗi Server" });
+    }
+});
+
+router.post('/:videoId/stats/comments', async (req, res) => {
+    try {
+        const { action } = req.body; // 'increment' (tăng) hoặc 'decrement' (giảm)
+        const val = action === 'increment' ? 1 : -1;
+
+        // Tìm video và update trường stats.comments
+        // Sử dụng $inc để tăng/giảm nguyên tử, tránh race condition
+        const updatedVideo = await Video.findByIdAndUpdate(
+            req.params.videoId, 
+            { $inc: { 'stats.comments': val } },
+            { new: true }
+        );
+
+        if (!updatedVideo) {
+            return res.status(404).json({ message: "Video không tồn tại" });
+        }
+
+        res.json({ success: true, comments: updatedVideo.stats.comments });
+    } catch (error) {
+        console.error("Lỗi Internal Update Stats:", error);
+        res.status(500).json({ message: "Lỗi Server" });
+    }
+});
 
 // 3. UPDATE: PATCH /api/videos/:videoId (Chỉnh sửa Video)
 router.patch("/:videoId", authMiddleware, async (req, res) => {

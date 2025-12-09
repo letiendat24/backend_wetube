@@ -6,7 +6,11 @@ const userSchema = new mongoose.Schema({
     passwordHash: { type: String, required: true },
     username: { type: String, required: true, trim: true },
     avatarUrl: { type: String, default: 'default_avatar.png' },
-
+    role: { 
+        type: String, 
+        enum: ['user', 'admin'], 
+        default: 'user' // Mặc định ai đăng ký cũng là user thường
+    },
     isChannel: { type: Boolean, default: true },
     channelName: { type: String, required: true, unique: true, trim: true },
     channelDescription: { type: String, default: '' },

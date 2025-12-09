@@ -1,11 +1,57 @@
 const express = require('express');
 const User = require('../models/User.model');
 const Video = require('../models/Video.model');
+const authMiddleware = require('../middlewares/auth.middleware');
 const mongoose = require('mongoose');
-
 const router = express.Router();
 
-// -------------------------------------------------------------------
+router.get('/dashboard', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.userId;
+        const ownerObjectId = new mongoose.Types.ObjectId(userId);
+
+        // 1. Aggregation trên bảng Video để tính tổng các chỉ số
+        const stats = await Video.aggregate([
+            // Bước 1: Lọc ra tất cả video của user này (kể cả private)
+            { $match: { ownerId: ownerObjectId } },
+
+            // Bước 2: Nhóm và tính tổng các chỉ số
+            {
+                $group: {
+                    _id: null,
+                    totalVideos: { $sum: 1 },
+                    totalViews: { $sum: "$stats.views" },
+                    totalLikes: { $sum: "$stats.likes" },
+                    totalDislikes: { $sum: "$stats.dislikes" },
+                    // Lưu ý: Nếu Video Model chưa có field comments, cái này sẽ là 0
+                    totalComments: { $sum: "$stats.comments" } 
+                }
+            }
+        ]);
+
+        // 2. Lấy thông tin kênh để lấy số sub
+        const channel = await User.findById(userId).select('subscribersCount');
+
+        // 3. Xử lý kết quả (Nếu user chưa có video nào, stats sẽ là mảng rỗng)
+        const result = stats[0] || {
+            totalVideos: 0,
+            totalViews: 0,
+            totalLikes: 0,
+            totalDislikes: 0,
+            totalComments: 0
+        };
+
+        // 4. Trả về kết quả tổng hợp
+        res.json({
+            totalSubscribers: channel ? channel.subscribersCount : 0,
+            ...result
+        });
+
+    } catch (error) {
+        console.error("Lỗi GET /stats/dashboard:", error);
+        res.status(500).json({ message: "Lỗi lấy thống kê dashboard." });
+    }
+});
 // GET /api/stats/channel/:channelId (Tổng quan kênh)
 // -------------------------------------------------------------------
 router.get('/channel/:channelId', async (req, res) => {

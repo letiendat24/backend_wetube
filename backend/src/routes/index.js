@@ -10,6 +10,7 @@ const channelRoutes = require('./channel.routes');
 const historyRoutes = require('./history.routes'); 
 const statsRoutes = require('./stats.routes'); 
 const gatewayRoutes = require('./gateway.routes');
+const adminRoutes = require('./admin.routes');
 
 // Sử dụng các router
 router.use('/auth', authRoutes); // /api/auth
@@ -19,5 +20,5 @@ router.use('/channels', channelRoutes); // /api/channels
 router.use('/history', historyRoutes);
 router.use('/stats', statsRoutes); 
 router.use('/comments', gatewayRoutes); // Endpoint sẽ là /api/comments
-
+router.use('/admin', adminRoutes);
 module.exports = router;
