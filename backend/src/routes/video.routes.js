@@ -17,43 +17,53 @@ const updateLikeDislike = async (videoId, userId, newStatus) => {
   session.startTransaction();
 
   try {
-    let videoUpdate = {};
     let statusChanged = false;
 
+    // 1. Tìm xem user đã like/dislike chưa
     const existingLike = await Like.findOne({ videoId, userId }).session(session);
 
     if (existingLike) {
       const oldStatus = existingLike.status;
 
+      // --- LOGIC TOGGLE (SỬA Ở ĐÂY) ---
       if (oldStatus === newStatus) {
-        await session.abortTransaction();
-        return { success: true, message: `Video đã được ${newStatus}` };
+        // Nếu bấm lại nút cũ (VD: Đang like bấm like) -> HỦY (Xóa record)
+        await Like.findByIdAndDelete(existingLike._id).session(session);
+        
+        // Giảm số lượng tương ứng
+        const fieldToDecrement = oldStatus === "like" ? "stats.likes" : "stats.dislikes";
+        await Video.findByIdAndUpdate(videoId, { $inc: { [fieldToDecrement]: -1 } }, { session });
+        
+        await session.commitTransaction();
+        return { success: true, action: 'removed', message: `Đã hủy ${oldStatus}` };
       }
+      // --------------------------------
 
+      // Nếu bấm nút khác (VD: Đang like bấm dislike) -> ĐỔI TRẠNG THÁI
       if (oldStatus === "like") {
-        videoUpdate = { $inc: { "stats.likes": -1, "stats.dislikes": 1 } };
+        // Giảm like, Tăng dislike
+        await Video.findByIdAndUpdate(videoId, { $inc: { "stats.likes": -1, "stats.dislikes": 1 } }, { session });
       } else {
-        videoUpdate = { $inc: { "stats.likes": 1, "stats.dislikes": -1 } };
+        // Giảm dislike, Tăng like
+        await Video.findByIdAndUpdate(videoId, { $inc: { "stats.likes": 1, "stats.dislikes": -1 } }, { session });
       }
-      statusChanged = true;
+      
+      // Cập nhật record Like thành status mới
+      existingLike.status = newStatus;
+      await existingLike.save({ session });
 
-      await Like.updateOne(
-        { _id: existingLike._id },
-        { status: newStatus },
-        { session }
-      );
     } else {
-      videoUpdate = { $inc: { [`stats.${newStatus}`]: 1 } };
-      statusChanged = true;
+      // --- LOGIC TẠO MỚI (SỬA LỖI CHÍNH TẢ) ---
+      // Chưa có -> Tạo mới
+      const fieldToIncrement = newStatus === "like" ? "stats.likes" : "stats.dislikes"; // Đảm bảo có 's'
+      
+      await Video.findByIdAndUpdate(videoId, { $inc: { [fieldToIncrement]: 1 } }, { session });
       await Like.create([{ videoId, userId, status: newStatus }], { session });
     }
 
-    if (statusChanged) {
-      await Video.findByIdAndUpdate(videoId, videoUpdate, { session });
-    }
-
     await session.commitTransaction();
-    return { success: true, message: `Đã ${newStatus} video.` };
+    return { success: true, action: 'added', message: `Đã ${newStatus} video.` };
+
   } catch (error) {
     await session.abortTransaction();
     throw error;
