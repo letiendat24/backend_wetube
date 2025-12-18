@@ -52,17 +52,53 @@ router.get('/:channelId', async (req, res) => {
             return res.status(404).json({ message: 'Kênh không tồn tại.' });
         }
 
-        // 2. Lấy 10 video công khai mới nhất của kênh
+        // 2. Lấy 10 video công khai mới nhất
         const latestVideos = await Video.find({ 
             ownerId: channelId,
-            visibility: 'public' // Chỉ hiển thị video công khai
+            visibility: 'public' 
         })
         .sort({ createdAt: -1 })
         .limit(10);
+
+        // --- 3. LOGIC MỚI: KIỂM TRA TRẠNG THÁI SUB (Soft Auth) ---
+        let isSubscribed = false;
+
+        // Lấy token từ header (nếu Frontend gửi lên)
+        const authHeader = req.headers.authorization;
         
-        // 3. Trả về kết quả
+        if (authHeader) {
+            const token = authHeader.split(" ")[1]; // Lấy chuỗi sau chữ "Bearer"
+            
+            if (token) {
+                try {
+                    // Giải mã token để lấy userId người đang xem
+                    // Lưu ý: Thay process.env.JWT_SECRET bằng đúng biến môi trường bạn dùng lúc login
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
+                    const currentUserId = decoded.userId || decoded.id; // Tùy vào lúc tạo token bạn đặt key là gì
+
+                    // Kiểm tra trong bảng Subscription xem cặp (subscriberId, channelId) có tồn tại không
+                    const subscription = await Subscription.findOne({
+                        subscriberId: currentUserId,
+                        channelId: channelId
+                    });
+
+                    // Nếu tìm thấy record => Đã đăng ký
+                    if (subscription) {
+                        isSubscribed = true;
+                    }
+                } catch (err) {
+                    // Nếu token lỗi hoặc hết hạn thì cứ coi như chưa đăng nhập -> isSubscribed = false
+                    // Không throw lỗi để người dùng vẫn xem được nội dung kênh
+                }
+            }
+        }
+
+        // 4. Trả về kết quả kèm isSubscribed
         res.json({
-            channel: channel.toJSON(),
+            channel: {
+                ...channel.toJSON(),
+                isSubscribed: isSubscribed // <--- Frontend sẽ đọc biến này
+            },
             latestVideos
         });
 

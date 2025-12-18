@@ -2,16 +2,16 @@ const express = require("express");
 const mongoose = require("mongoose");
 const authMiddleware = require("../middlewares/auth.middleware");
 const { cloudinaryUploadMiddleware } = require('../helpers/upload.helper');
-
-// Models cần thiết
+// Models 
 const Video = require("../models/Video.model");
 const Like = require("../models/Like.model");
 const History = require("../models/History.model");
+//Controllers
+const { sub, trend, addToHistory, getHistory } = require("../controllers/video.controller");
 
 const router = express.Router();
 
 // HELPER FUNCTION: Xử lý Logic Like/Dislike (Dùng Transaction)
-
 const updateLikeDislike = async (videoId, userId, newStatus) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -262,6 +262,10 @@ router.get('/liked', authMiddleware, async (req, res) => {
     }
 });
 
+router.get("/sub", authMiddleware, sub);
+router.get("/trend", trend);
+// 2. Route xem danh sách lịch sử (GET)
+router.get("/history", authMiddleware, getHistory);
 
 // 2. READ: GET /api/videos/:videoId (Lấy thông tin và Tăng View)
 router.get("/:videoId", async (req, res) => {
@@ -307,29 +311,6 @@ router.post('/:videoId/stats/comments', async (req, res) => {
     }
 });
 
-router.post('/:videoId/stats/comments', async (req, res) => {
-    try {
-        const { action } = req.body; // 'increment' (tăng) hoặc 'decrement' (giảm)
-        const val = action === 'increment' ? 1 : -1;
-
-        // Tìm video và update trường stats.comments
-        // Sử dụng $inc để tăng/giảm nguyên tử, tránh race condition
-        const updatedVideo = await Video.findByIdAndUpdate(
-            req.params.videoId, 
-            { $inc: { 'stats.comments': val } },
-            { new: true }
-        );
-
-        if (!updatedVideo) {
-            return res.status(404).json({ message: "Video không tồn tại" });
-        }
-
-        res.json({ success: true, comments: updatedVideo.stats.comments });
-    } catch (error) {
-        console.error("Lỗi Internal Update Stats:", error);
-        res.status(500).json({ message: "Lỗi Server" });
-    }
-});
 
 // 3. UPDATE: PATCH /api/videos/:videoId (Chỉnh sửa Video)
 router.patch("/:videoId", authMiddleware, async (req, res) => {
@@ -472,53 +453,8 @@ router.delete("/:videoId/like", authMiddleware, async (req, res) => {
   }
 });
 
-
-// 7. GET /api/videos/liked (Lấy danh sách video đã được user like)
-router.get('/liked', authMiddleware, async (req, res) => {
-    const userId = req.userId;
-
-    try {
-        const likedVideos = await Like.aggregate([
-            { $match: { 
-                userId: new mongoose.Types.ObjectId(userId),
-                status: 'like'
-            }},
-            
-            { $sort: { createdAt: -1 } },
-
-            { $lookup: {
-                from: 'videos',
-                localField: 'videoId',
-                foreignField: '_id',
-                as: 'videoDetails'
-            }},
-            { $unwind: '$videoDetails' },
-            
-            { $lookup: {
-                from: 'users',
-                localField: 'videoDetails.ownerId',
-                foreignField: '_id',
-                as: 'channelDetails'
-            }},
-            { $unwind: '$channelDetails' },
-
-            { $project: {
-                _id: '$videoDetails._id',
-                title: '$videoDetails.title',
-                thumbnailUrl: '$videoDetails.thumbnailUrl',
-                views: '$videoDetails.stats.views',
-                likedAt: '$createdAt', 
-                channelName: '$channelDetails.channelName',
-                channelId: '$channelDetails._id',
-            }}
-        ]);
-
-        res.json(likedVideos);
-    } catch (error) {
-        console.error('Lỗi GET /videos/liked:', error);
-        res.status(500).json({ message: 'Lấy danh sách video đã thích thất bại.' });
-    }
-});
+// 1. Route lưu lịch sử (POST)
+router.post("/:videoId/history", authMiddleware, addToHistory);
 
 
 module.exports = router;

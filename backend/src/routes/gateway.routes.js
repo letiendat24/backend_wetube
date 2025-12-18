@@ -107,19 +107,12 @@ const axios = require('axios');
 const authMiddleware = require('../middlewares/auth.middleware');
 const Video = require('../models/Video.model');
 const User = require('../models/User.model');
-
-// Sửa lại đúng tên file healthCheck (có chữ 'l')
 const { getServiceStatus } = require('../utils/heathCheck'); 
 
 const router = express.Router();
 
 // Dùng IP 127.0.0.1 để tránh lỗi treo trên một số máy Windows
 const COMMENT_SERVICE_URL = process.env.COMMENT_SERVICE_URL || 'http://127.0.0.1:3001';
-
-// -------------------------------------------------------------------
-// 1. POST /api/comments (Tạo Comment)
-// Nhiệm vụ: Auth -> Check Video -> Forward sang Service
-// -------------------------------------------------------------------
 router.post('/', authMiddleware, async (req, res) => {
     // Circuit Breaker: Kiểm tra Service có sống không
     const status = getServiceStatus();
@@ -141,9 +134,6 @@ router.post('/', authMiddleware, async (req, res) => {
 
         // 2. Data Enrichment: Lấy thông tin User để gửi kèm
         const currentUser = await User.findById(userId).select('username avatarUrl channelName');
-
-        // 3. Forward request sang Comment Service
-        // Gateway CHỈ chuyển tiếp, KHÔNG tự ý update DB Video (Decoupled)
         const response = await axios.post(`${COMMENT_SERVICE_URL}/comments`, {
             userId,
             videoId,
@@ -167,10 +157,6 @@ router.post('/', authMiddleware, async (req, res) => {
     }
 });
 
-// -------------------------------------------------------------------
-// 2. GET /api/comments/:videoId (Lấy danh sách)
-// Nhiệm vụ: Forward sang Service -> Lấy ID -> Populate User Info
-// -------------------------------------------------------------------
 router.get('/:videoId', async (req, res) => {
     const status = getServiceStatus();
     if (!status.COMMENT) {
@@ -209,11 +195,6 @@ router.get('/:videoId', async (req, res) => {
         res.json([]); 
     }
 });
-
-// -------------------------------------------------------------------
-// 3. POST /api/comments/:commentId/action (Like/Dislike Comment)
-// Nhiệm vụ: Forward hành động tương tác sang Service
-// -------------------------------------------------------------------
 router.post('/:commentId/action', authMiddleware, async (req, res) => {
     const status = getServiceStatus();
     if (!status.COMMENT) {
