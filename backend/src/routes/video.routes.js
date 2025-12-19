@@ -7,7 +7,7 @@ const Video = require("../models/Video.model");
 const Like = require("../models/Like.model");
 const History = require("../models/History.model");
 //Controllers
-const { sub, trend, addToHistory, getHistory } = require("../controllers/video.controller");
+const { sub, trend, addToHistory, getHistory, getByTag, getLikedVideos, getAuthStatus, likeVideo, dislikeVideo, removeInteraction } = require("../controllers/video.controller");
 
 const router = express.Router();
 
@@ -209,65 +209,70 @@ router.get("/", async (req, res) => {
   }
 });
 
-//GET /api/videos/liked (Lấy danh sách video đã được user like)
-router.get('/liked', authMiddleware, async (req, res) => {
-    const userId = req.userId;
+// //GET /api/videos/liked (Lấy danh sách video đã được user like)
+// router.get('/liked', authMiddleware, async (req, res) => {
+//     const userId = req.userId;
 
-    try {
-        const likedVideos = await Like.aggregate([
-            // 1. $match: Lọc các record Like của user hiện tại với status='like'
-            { $match: { 
-                userId: new mongoose.Types.ObjectId(userId),
-                status: 'like'
-            }},
+//     try {
+//         const likedVideos = await Like.aggregate([
+//             // 1. $match: Lọc các record Like của user hiện tại với status='like'
+//             { $match: { 
+//                 userId: new mongoose.Types.ObjectId(userId),
+//                 status: 'like'
+//             }},
             
-            // 2. $sort: Sắp xếp theo thời gian like gần nhất
-            { $sort: { createdAt: -1 } },
+//             // 2. $sort: Sắp xếp theo thời gian like gần nhất
+//             { $sort: { createdAt: -1 } },
 
-            // 3. $lookup: Lấy thông tin chi tiết Video
-            { $lookup: {
-                from: 'videos',
-                localField: 'videoId',
-                foreignField: '_id',
-                as: 'videoDetails'
-            }},
-            { $unwind: '$videoDetails' },
+//             // 3. $lookup: Lấy thông tin chi tiết Video
+//             { $lookup: {
+//                 from: 'videos',
+//                 localField: 'videoId',
+//                 foreignField: '_id',
+//                 as: 'videoDetails'
+//             }},
+//             { $unwind: '$videoDetails' },
             
-            // 4. $lookup: Lấy thông tin Channel (owner) của video
-            { $lookup: {
-                from: 'users',
-                localField: 'videoDetails.ownerId',
-                foreignField: '_id',
-                as: 'channelDetails'
-            }},
-            { $unwind: '$channelDetails' },
+//             // 4. $lookup: Lấy thông tin Channel (owner) của video
+//             { $lookup: {
+//                 from: 'users',
+//                 localField: 'videoDetails.ownerId',
+//                 foreignField: '_id',
+//                 as: 'channelDetails'
+//             }},
+//             { $unwind: '$channelDetails' },
 
-            // 5. $project: Định dạng lại output
-            { $project: {
-                _id: '$videoDetails._id',
-                title: '$videoDetails.title',
-                description: '$videoDetails.description',
-                thumbnailUrl: '$videoDetails.thumbnailUrl',
-                views: '$videoDetails.stats.views',
-                likedAt: '$createdAt', // Thời điểm user like
-                channelName: '$channelDetails.channelName',
-                channelId: '$channelDetails._id',
-            }}
-        ]);
+//             // 5. $project: Định dạng lại output
+//             { $project: {
+//                 _id: '$videoDetails._id',
+//                 title: '$videoDetails.title',
+//                 description: '$videoDetails.description',
+//                 thumbnailUrl: '$videoDetails.thumbnailUrl',
+//                 views: '$videoDetails.stats.views',
+//                 likedAt: '$createdAt', // Thời điểm user like
+//                 channelName: '$channelDetails.channelName',
+//                 channelId: '$channelDetails._id',
+//             }}
+//         ]);
 
-        res.json(likedVideos);
-    } catch (error) {
-        console.error('Lỗi GET /videos/liked:', error);
-        res.status(500).json({ message: 'Lấy danh sách video đã thích thất bại.' });
-    }
-});
-
+//         res.json(likedVideos);
+//     } catch (error) {
+//         console.error('Lỗi GET /videos/liked:', error);
+//         res.status(500).json({ message: 'Lấy danh sách video đã thích thất bại.' });
+//     }
+// });
 router.get("/sub", authMiddleware, sub);
 router.get("/trend", trend);
 // 2. Route xem danh sách lịch sử (GET)
 router.get("/history", authMiddleware, getHistory);
+router.get("/tags", getByTag);
+router.get("/liked", authMiddleware, getLikedVideos);
 
+router.get("/:videoId/auth-status", authMiddleware, getAuthStatus);
 // 2. READ: GET /api/videos/:videoId (Lấy thông tin và Tăng View)
+router.post("/:videoId/like", authMiddleware, likeVideo);
+router.post("/:videoId/dislike", authMiddleware, dislikeVideo);
+router.delete("/:videoId/like", authMiddleware, removeInteraction);
 router.get("/:videoId", async (req, res) => {
   try {
     const video = await Video.findByIdAndUpdate(
