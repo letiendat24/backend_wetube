@@ -1,5 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const multer = require("multer");
+
 const authMiddleware = require("../middlewares/auth.middleware");
 const { cloudinaryUploadMiddleware } = require('../helpers/upload.helper');
 // Models 
@@ -318,39 +320,78 @@ router.post('/:videoId/stats/comments', async (req, res) => {
 
 
 // 3. UPDATE: PATCH /api/videos/:videoId (Chỉnh sửa Video)
-router.patch("/:videoId", authMiddleware, async (req, res) => {
-  const { videoId } = req.params;
-  const { title, description, tags, visibility } = req.body;
+const storage = multer.memoryStorage(); // Hoặc dùng disk storage của bạn
+const upload = multer({ storage: storage });
+router.patch("/:videoId", authMiddleware,
+  // ✨ THÊM MULTER VÀO ĐÂY: Dùng fields để nhận file (tùy chọn) và metadata
+  upload.fields([
+    { name: 'video', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    const { videoId } = req.params;
 
-  const updates = {};
-  if (title) updates.title = title;
-  if (description) updates.description = description;
-  if (tags) updates.tags = tags;
-  if (visibility) updates.visibility = visibility;
+    // 2. ✨ THAY ĐỔI: Dữ liệu metadata nằm trong req.body
+    const { title, description, tags, visibility } = req.body;
 
-  if (Object.keys(updates).length === 0) {
-    return res.status(400).json({ message: "Không có dữ liệu cập nhật." });
-  }
+    // 3. ✨ THAY ĐỔI: Dữ liệu file nằm trong req.files (nếu có)
+    const files = req.files;
 
-  try {
-    const updatedVideo = await Video.findOneAndUpdate(
-      { _id: videoId, ownerId: req.userId }, // Yêu cầu khớp cả ID video và ID người sở hữu
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
+    const updates = {};
 
-    if (!updatedVideo) {
-      return res
-        .status(404)
-        .json({ message: "Không tìm thấy video hoặc bạn không có quyền chỉnh sửa." });
+    // Xử lý metadata
+    if (title) updates.title = title;
+    if (description) updates.description = description;
+    if (visibility) updates.visibility = visibility;
+
+    // Xử lý tags: Nhận từ FE (tags: "tag1, tag2")
+    if (tags) {
+      // Chuyển chuỗi tags (ví dụ: "react,js,tutorial") thành mảng
+      updates.tags = tags.split(',').map(t => t.trim()).filter(t => t.length > 0);
     }
 
-    res.json(updatedVideo);
-  } catch (error) {
-    console.error("Lỗi PATCH /videos/:videoId:", error);
-    res.status(500).json({ message: "Cập nhật video thất bại." });
+    // Xử lý File (Nếu có file mới, gọi dịch vụ upload và cập nhật URL)
+    if (files && files.video && files.video.length > 0) {
+      // **BƯỚC THIẾU:** Gọi dịch vụ upload file (S3, Cloudinary...) ở đây
+      // Giả định service upload trả về videoUrl mới
+      // const newVideoUrl = await uploadService.uploadVideo(files.video[0]);
+      // updates.videoUrl = newVideoUrl;
+
+      // *LƯU Ý: Đây là logic phức tạp, cần triển khai dịch vụ upload*
+      updates.videoUrl = "New URL for debugging: " + files.video[0].originalname;
+    }
+
+    if (files && files.thumbnail && files.thumbnail.length > 0) {
+      // **BƯỚC THIẾU:** Gọi dịch vụ upload thumbnail
+      // updates.thumbnailUrl = await uploadService.uploadThumbnail(files.thumbnail[0]);
+      updates.thumbnailUrl = "New Thumbnail URL for debugging: " + files.thumbnail[0].originalname;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "Không có dữ liệu cập nhật." });
+    }
+
+    try {
+      const updatedVideo = await Video.findOneAndUpdate(
+        { _id: videoId, ownerId: req.userId },
+        { $set: updates },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedVideo) {
+        return res
+          .status(404)
+          .json({ message: "Không tìm thấy video hoặc bạn không có quyền chỉnh sửa." });
+      }
+
+      res.json(updatedVideo);
+    } catch (error) {
+      // Lỗi ở đây có thể là do Mongoose Validation hoặc lỗi database khác
+      console.error("Lỗi PATCH /videos/:videoId (Database/Logic):", error);
+      res.status(500).json({ message: "Cập nhật video thất bại." });
+    }
   }
-});
+);
 
 //LIKE/DISLIKE ENDPOINTS
 // POST /api/videos/:id/like

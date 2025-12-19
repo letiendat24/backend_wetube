@@ -292,6 +292,7 @@ const removeInteraction = async (req, res, next) => {
     next(err);
   }
 };
+
 module.exports = { 
   sub, 
   trend, 
@@ -304,3 +305,4 @@ module.exports = {
   dislikeVideo,
   removeInteraction
  };
+
